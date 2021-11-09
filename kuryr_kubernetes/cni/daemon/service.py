@@ -99,7 +99,6 @@ class DaemonServer(object):
         try:
             params = self._prepare_request()
         except Exception:
-            self._check_failure()
             LOG.exception('Exception when reading CNI params.')
             error = self._error(ErrInvalidEnvironmentVariables,
                                 "Required CNI params missing.")
@@ -109,14 +108,11 @@ class DaemonServer(object):
             vif = self.plugin.add(params)
             data = jsonutils.dumps(vif.obj_to_primitive())
         except exceptions.ResourceNotReady as e:
-            self._check_failure()
             LOG.error('Error when processing addNetwork request')
-            error = self._error(ErrTryAgainLater,
-                                f"{e}. Try Again Later.")
+            error = self._error(ErrTryAgainLater, f"{e}. Try Again Later.")
             return error, httplib.GATEWAY_TIMEOUT, self.headers
         except pyroute2.NetlinkError as e:
             if e.code == errno.EEXIST:
-                self._check_failure()
                 args = {'kind': 'vlan', 'vlan_id': vif.vlan_id}
                 LOG.warning(
                     f'Creation of pod interface failed due to VLAN ID '
@@ -130,17 +126,10 @@ class DaemonServer(object):
                 return error, httplib.GATEWAY_TIMEOUT, self.headers
             raise
         except Exception:
-            if not self.healthy.value:
-                error = self._error(ErrInternal,
-                                    "Maximum CNI ADD Failures Reached.",
-                                    "Error when processing addNetwork request."
-                                    " CNI Params: {}".format(params))
-            else:
-                self._check_failure()
-                error = self._error(ErrInternal,
-                                    "Error processing request",
-                                    "Failure processing addNetwork request. "
-                                    "CNI Params: {}".format(params))
+            error = self._error(ErrInternal,
+                                "Error processing request",
+                                "Failure processing addNetwork request. "
+                                "CNI Params: {}".format(params))
             LOG.exception('Error when processing addNetwork request. CNI '
                           'Params: %s', params)
             return error, httplib.INTERNAL_SERVER_ERROR, self.headers
@@ -168,17 +157,10 @@ class DaemonServer(object):
                         'Ignoring this error, pod is most likely gone')
             return '', httplib.NO_CONTENT, self.headers
         except Exception:
-            if not self.healthy.value:
-                error = self._error(ErrInternal,
-                                    "Maximum CNI DEL Failures Reached.",
-                                    "Error processing delNetwork request. "
-                                    "CNI Params: {}".format(params))
-            else:
-                self._check_failure()
-                error = self._error(ErrInternal,
-                                    "Error processing request",
-                                    "Failure processing delNetwork request. "
-                                    "CNI Params: {}".format(params))
+            error = self._error(ErrInternal,
+                                "Error processing request",
+                                "Failure processing delNetwork request. "
+                                "CNI Params: {}".format(params))
             LOG.exception('Error when processing delNetwork request. CNI '
                           'Params: %s.', params)
             return error, httplib.INTERNAL_SERVER_ERROR, self.headers
@@ -215,16 +197,6 @@ class DaemonServer(object):
         self._server.shutdown()
         self._server.server_close()
         LOG.info("All DaemonServer workers finished gracefully.")
-
-    def _check_failure(self):
-        with self.failure_count.get_lock():
-            if self.failure_count.value < CONF.cni_daemon.cni_failures_count:
-                self.failure_count.value += 1
-            else:
-                with self.healthy.get_lock():
-                    LOG.debug("Reporting maximum CNI ADD/DEL failures "
-                              "reached.")
-                    self.healthy.value = False
 
 
 class CNIDaemonServerService(cotyledon.Service):

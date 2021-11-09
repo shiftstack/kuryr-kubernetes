@@ -178,7 +178,7 @@ k8s_opts = [
                       'periodic reconciling. The reconciliation is done to '
                       'prevent Kuryr from missing events due to K8s API or '
                       'etcd issues.'),
-               default=120),
+               default=60),
     cfg.ListOpt('enabled_handlers',
                 help=_("The comma-separated handlers that should be "
                        "registered for watching in the pipeline."),
